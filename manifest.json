@@ -2,7 +2,7 @@
     "display_name": "HD Avatar",
     "name": "hd-avatar",
     "version": "2.0.0",
-    "description": "将聊天小头像和点开的大头像全部转换为PNG，消除JPEG压缩伪影，提升显示清晰度。",
+    "description": "HD Avatar Plugin",
     "requires": [],
     "optional": [],
     "js": "index.js",
