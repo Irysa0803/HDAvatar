@@ -1,13 +1,13 @@
 {
-    "display_name": "HD Avatar",
-    "name": "hd-avatar",
-    "version": "1.0.0",
-    "description": "将聊天中的角色小头像从 JPG 格式转换为 PNG，提升显示清晰度。",
-    "requires": [],
-    "optional": [],
-    "js": "index.js",
-    "css": "style.css",
-    "author": "Custom Plugin",
-    "homePage": "",
-    "auto": true
+“display_name”: “HD Avatar”,
+“name”: “hd-avatar”,
+“version”: “2.0.0”,
+“description”: “将聊天小头像和点开的大头像全部转换为 PNG，消除 JPEG 压缩伪影，提升显示清晰度。”,
+“requires”: [],
+“optional”: [],
+“js”: “index.js”,
+“css”: “style.css”,
+“author”: “Custom Plugin”,
+“homePage”: “”,
+“auto”: true
 }
