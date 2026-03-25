@@ -1,15 +1,9 @@
-/**
- * HD Avatar Plugin - Style
- * 可选：提升头像渲染质量的 CSS 补充
- */
-
-/* 强制所有聊天头像使用高质量图像渲染 */
+/* HD Avatar Plugin v3 */
 #chat .avatar img,
-#chat img.avatar,
 .mes .avatar img,
-.mes img.avatar {
+.zoomed_avatar img,
+#zoomed_avatar img,
+.character_select img {
     image-rendering: auto;
     image-rendering: high-quality;
-    /* 防止浏览器对小尺寸图像做模糊插值 */
-    -webkit-font-smoothing: antialiased;
 }
