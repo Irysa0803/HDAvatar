@@ -1,9 +1,10 @@
-/* HD Avatar Plugin v3 */
+/* HD Avatar v4 */
 #chat .avatar img,
 .mes .avatar img,
 .zoomed_avatar img,
 #zoomed_avatar img,
-.character_select img {
-    image-rendering: auto;
-    image-rendering: high-quality;
+.character_select img,
+.avatar img {
+image-rendering: auto;
+image-rendering: high-quality;
 }
