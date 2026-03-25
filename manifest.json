@@ -1,13 +1,13 @@
 {
-    "display_name": "HD Avatar",
-    "name": "hd-avatar",
-    "version": "2.0.0",
-    "description": "HD Avatar Plugin",
-    "requires": [],
-    "optional": [],
-    "js": "index.js",
-    "css": "style.css",
-    "author": "Custom Plugin",
-    "homePage": "",
-    "auto": true
+“display_name”: “HD Avatar”,
+“name”: “hd-avatar”,
+“version”: “3.0.0”,
+“description”: “通过API关闭酒馆缩略图压缩，让角色和用户头像直接显示原图画质。”,
+“requires”: [],
+“optional”: [],
+“js”: “index.js”,
+“css”: “style.css”,
+“author”: “Custom Plugin”,
+“homePage”: “”,
+“auto”: true
 }
