@@ -1,8 +1,7 @@
 /**
 
-- HD Avatar Plugin for SillyTavern
-- 将聊天消息中的角色头像由 JPG 转换为 PNG，提升清晰度
-- 同时处理：聊天小头像 + 点开的大头像弹窗
+- HD Avatar Plugin for SillyTavern v3.0
+- 通过调用酒馆 API 关闭缩略图压缩，让头像直接显示原图
   */
 
 (async function () {
@@ -10,169 +9,270 @@
 
 ```
 const MODULE_NAME = 'hd-avatar';
-const DEBUG = false;
 
 function log(...args) {
-    if (DEBUG) console.log(`[${MODULE_NAME}]`, ...args);
+    console.log(`[${MODULE_NAME}]`, ...args);
 }
 
-/**
- * 将一个 <img> 元素的 src 转换为 PNG Data URL
- */
-function convertImgToPng(imgEl) {
-    if (imgEl.dataset.hdConverted === '1') return;
+// ========== 核心：通过 API 关闭缩略图 ==========
 
-    const src = imgEl.src || imgEl.getAttribute('src') || '';
-    if (!src || src.startsWith('data:image/png') || src.endsWith('.png')) {
-        imgEl.dataset.hdConverted = '1';
+async function setThumbnailsEnabled(enabled) {
+    try {
+        // 先获取当前设置
+        const getResp = await fetch('/api/settings/get', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({}),
+        });
+
+        if (!getResp.ok) throw new Error('获取设置失败');
+        const settings = await getResp.json();
+
+        // 修改缩略图开关
+        if (!settings.thumbnailsEnabled === undefined) {
+            settings.thumbnailsEnabled = enabled;
+        }
+        settings.thumbnailsEnabled = enabled;
+
+        // 保存设置
+        const saveResp = await fetch('/api/settings/save', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(settings),
+        });
+
+        if (!saveResp.ok) throw new Error('保存设置失败');
+        log('缩略图设置已更新:', enabled ? '开启' : '关闭');
+        return true;
+    } catch (e) {
+        log('API 调用失败:', e.message);
+        return false;
+    }
+}
+
+// ========== 备用方案：强制替换头像为原图路径 ==========
+
+/**
+ * 把缩略图路径替换成原图路径
+ * 酒馆缩略图路径格式: /thumbnails/avatar?file=xxx.jpg
+ * 原图路径格式: /characters/xxx.jpg 或 /User Avatars/xxx.jpg
+ */
+function replaceThumbnailSrc(imgEl) {
+    if (imgEl.dataset.hdFixed === '1') return;
+
+    const src = imgEl.src || '';
+    if (!src) return;
+
+    let newSrc = null;
+
+    // 处理角色头像缩略图
+    if (src.includes('/thumbnails/avatar') || src.includes('thumbnail')) {
+        const urlParams = new URLSearchParams(src.split('?')[1] || '');
+        const file = urlParams.get('file');
+        if (file) {
+            newSrc = `/characters/${file}`;
+        }
+    }
+
+    // 处理用户头像缩略图
+    if (src.includes('/thumbnails/persona')) {
+        const urlParams = new URLSearchParams(src.split('?')[1] || '');
+        const file = urlParams.get('file');
+        if (file) {
+            newSrc = `/User Avatars/${file}`;
+        }
+    }
+
+    if (newSrc) {
+        // 尝试加载原图，成功则替换
+        const testImg = new Image();
+        testImg.onload = () => {
+            imgEl.src = newSrc;
+            imgEl.dataset.hdFixed = '1';
+            log('替换为原图:', newSrc);
+        };
+        testImg.onerror = () => {
+            // 原图加载失败，用 Canvas 转 PNG 作为兜底
+            convertToPng(imgEl);
+        };
+        testImg.src = newSrc;
+    } else {
+        convertToPng(imgEl);
+    }
+
+    imgEl.dataset.hdFixed = '1';
+}
+
+function convertToPng(imgEl) {
+    if (!imgEl.complete || imgEl.naturalWidth === 0) {
+        imgEl.addEventListener('load', () => convertToPng(imgEl), { once: true });
         return;
     }
-
-    if (imgEl.complete && imgEl.naturalWidth > 0) {
-        doConvert(imgEl);
-    } else {
-        imgEl.addEventListener('load', () => doConvert(imgEl), { once: true });
-        imgEl.addEventListener('error', () => {
-            imgEl.dataset.hdConverted = '1';
-        }, { once: true });
-    }
-}
-
-function doConvert(imgEl) {
-    if (imgEl.dataset.hdConverted === '1') return;
-
     try {
         const canvas = document.createElement('canvas');
-        canvas.width = imgEl.naturalWidth || imgEl.width || 100;
-        canvas.height = imgEl.naturalHeight || imgEl.height || 100;
-        const ctx = canvas.getContext('2d');
-        ctx.drawImage(imgEl, 0, 0);
-        const pngDataUrl = canvas.toDataURL('image/png');
-        imgEl.src = pngDataUrl;
-        imgEl.dataset.hdConverted = '1';
-        log('Converted to PNG:', imgEl.className);
+        canvas.width = imgEl.naturalWidth;
+        canvas.height = imgEl.naturalHeight;
+        canvas.getContext('2d').drawImage(imgEl, 0, 0);
+        imgEl.src = canvas.toDataURL('image/png');
     } catch (e) {
-        imgEl.dataset.hdConverted = '1';
-        log('Canvas convert failed (possibly CORS):', e.message);
+        log('Canvas 转换失败:', e.message);
     }
 }
 
-/**
- * 处理聊天区域的小头像
- */
+// ========== 扫描所有头像 ==========
+
 function processAllAvatars() {
     const selectors = [
         '#chat .avatar img',
-        '#chat img.avatar',
-        '#chat .mes_block .avatar img',
         '.mes .avatar img',
-        '.mes img.avatar',
-    ];
-
-    const seen = new Set();
-    selectors.forEach(sel => {
-        document.querySelectorAll(sel).forEach(img => {
-            if (!seen.has(img)) {
-                seen.add(img);
-                convertImgToPng(img);
-            }
-        });
-    });
-}
-
-/**
- * 处理角色卡列表、角色信息面板里的头像（包括点开的大图）
- */
-function processLargeAvatars() {
-    const selectors = [
-        // 角色卡大图
-        '#character_cross_talk_avatar img',
-        '#avatar_load_preview',
-        '.avatar_load_preview',
-        // 弹窗 / 详情面板里的大头像
-        '#character_popup img',
-        '.character_popup img',
-        '#char_popup img',
         '.zoomed_avatar img',
         '#zoomed_avatar img',
-        // 角色卡列表缩略图
         '.character_select img',
-        '.char_select img',
         '#rm_print_characters_block img',
-        // 用户头像设置预览
         '#user_avatar_block img',
         '#your_persona_avatar img',
+        '.character_popup img',
     ];
-
     const seen = new Set();
     selectors.forEach(sel => {
         document.querySelectorAll(sel).forEach(img => {
             if (!seen.has(img)) {
                 seen.add(img);
-                convertImgToPng(img);
+                replaceThumbnailSrc(img);
             }
         });
     });
 }
 
-/**
- * 统一处理所有头像
- */
-function processAll() {
-    processAllAvatars();
-    processLargeAvatars();
-}
+// ========== MutationObserver ==========
 
-/**
- * MutationObserver 监听全局 DOM 变化
- * 包括聊天新消息、弹窗打开、角色卡加载等
- */
 function observeAll() {
     const observer = new MutationObserver((mutations) => {
         for (const mutation of mutations) {
             for (const node of mutation.addedNodes) {
                 if (node.nodeType !== 1) continue;
-
-                const imgs = node.querySelectorAll
-                    ? node.querySelectorAll('img')
-                    : [];
-                imgs.forEach(img => convertImgToPng(img));
-
-                if (node.tagName === 'IMG') convertImgToPng(node);
+                (node.querySelectorAll ? node.querySelectorAll('img') : [])
+                    .forEach(img => replaceThumbnailSrc(img));
+                if (node.tagName === 'IMG') replaceThumbnailSrc(node);
             }
         }
     });
-
-    // 监听整个 body，捕获弹窗、侧边栏等所有区域
     observer.observe(document.body, { childList: true, subtree: true });
-    log('MutationObserver attached to document.body');
 }
 
-/**
- * 插件入口
- */
-function init() {
-    log('HD Avatar plugin loaded (full coverage mode)');
+// ========== UI 面板 ==========
 
-    // 初始扫描
-    processAll();
+function createPanel() {
+    const panel = document.createElement('div');
+    panel.id = 'hd-avatar-panel';
+    panel.style.cssText = `
+        position: fixed;
+        bottom: 80px;
+        right: 16px;
+        background: #1a1a2e;
+        border: 1px solid #4a4a8a;
+        border-radius: 12px;
+        padding: 12px 16px;
+        color: #fff;
+        font-size: 13px;
+        z-index: 99999;
+        box-shadow: 0 4px 20px rgba(0,0,0,0.5);
+        min-width: 180px;
+        display: none;
+    `;
+    panel.innerHTML = `
+        <div style="font-weight:bold;margin-bottom:10px;font-size:14px;">🖼️ HD Avatar</div>
+        <div id="hd-status" style="margin-bottom:10px;color:#aaa;font-size:12px;">检测中...</div>
+        <button id="hd-toggle-btn" style="
+            width:100%;padding:6px;border:none;border-radius:8px;
+            background:#5555aa;color:#fff;cursor:pointer;font-size:13px;
+        ">关闭缩略图压缩</button>
+        <div style="margin-top:8px;font-size:11px;color:#888;">重启酒馆后生效</div>
+    `;
+    document.body.appendChild(panel);
 
-    // 持续监听
+    // 触发按钮（浮动小图标）
+    const trigger = document.createElement('div');
+    trigger.id = 'hd-avatar-trigger';
+    trigger.title = 'HD Avatar 设置';
+    trigger.style.cssText = `
+        position: fixed;
+        bottom: 80px;
+        right: 16px;
+        width: 36px;
+        height: 36px;
+        background: #5555aa;
+        border-radius: 50%;
+        cursor: pointer;
+        z-index: 99999;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 18px;
+        box-shadow: 0 2px 10px rgba(0,0,0,0.4);
+    `;
+    trigger.textContent = '🖼';
+    document.body.appendChild(trigger);
+
+    trigger.addEventListener('click', () => {
+        const visible = panel.style.display !== 'none';
+        panel.style.display = visible ? 'none' : 'block';
+        trigger.style.display = visible ? 'flex' : 'none';
+    });
+
+    panel.querySelector('#hd-toggle-btn').addEventListener('click', async () => {
+        const btn = panel.querySelector('#hd-toggle-btn');
+        const status = panel.querySelector('#hd-status');
+        btn.textContent = '处理中...';
+        btn.disabled = true;
+
+        const success = await setThumbnailsEnabled(false);
+        if (success) {
+            status.textContent = '✅ 已关闭压缩，重启酒馆生效';
+            status.style.color = '#88ff88';
+            btn.textContent = '已关闭缩略图压缩';
+        } else {
+            status.textContent = '⚠️ API 失败，已用备用方案';
+            status.style.color = '#ffaa44';
+            btn.textContent = '重试';
+            btn.disabled = false;
+        }
+
+        // 无论如何都执行备用方案
+        processAllAvatars();
+    });
+
+    // 关闭按钮
+    panel.addEventListener('dblclick', () => {
+        panel.style.display = 'none';
+        trigger.style.display = 'flex';
+    });
+}
+
+// ========== 初始化 ==========
+
+async function init() {
+    log('HD Avatar v3.0 启动');
+
+    createPanel();
+    processAllAvatars();
     observeAll();
 
-    // 切换聊天时重新扫描
-    document.addEventListener('chat_loaded', () => {
-        log('chat_loaded — re-scanning');
-        setTimeout(processAll, 300);
-    });
-    document.addEventListener('chatLoaded', () => {
-        setTimeout(processAll, 300);
-    });
+    // 自动尝试关闭缩略图
+    const success = await setThumbnailsEnabled(false);
+    const status = document.querySelector('#hd-status');
+    if (status) {
+        if (success) {
+            status.textContent = '✅ 已自动关闭压缩';
+            status.style.color = '#88ff88';
+        } else {
+            status.textContent = '⚠️ 用备用方案运行中';
+            status.style.color = '#ffaa44';
+        }
+    }
 
-    // 角色卡列表刷新时重新扫描
-    document.addEventListener('character_loaded', () => {
-        setTimeout(processLargeAvatars, 300);
-    });
+    document.addEventListener('chat_loaded', () => setTimeout(processAllAvatars, 300));
+    document.addEventListener('character_loaded', () => setTimeout(processAllAvatars, 300));
 }
 
 if (document.readyState === 'loading') {
