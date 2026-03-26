@@ -1,10 +1,14 @@
-/* HD Avatar v4 */
-#chat .avatar img,
-.mes .avatar img,
+/* HD Avatar v5 */
+.avatar img,
+#chat img,
 .zoomed_avatar img,
 #zoomed_avatar img,
-.character_select img,
-.avatar img {
+.character_select img {
 image-rendering: auto;
 image-rendering: high-quality;
+}
+
+#hd-avatar-wand-btn:hover,
+#hd-wand-item:hover {
+background: rgba(255,255,255,0.1);
 }
